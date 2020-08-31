@@ -3,6 +3,7 @@
 
 #include "bucket_service/src/dist_calc.h"
 #include "protoc_files/bucket.grpc.pb.h"
+#include <grpc++/grpc++.h>
 
 /* Create a dataset, given a binary file containing float values.
    Dimensions of all points are 2048.
