@@ -2,6 +2,7 @@
 #define __CLIENT_HELPER_H_INCLUDED__
 
 #include "protoc_files/lookup.grpc.pb.h"
+#include <grpc++/grpc++.h>
 
 struct LookupSrvTimingInfo {
     uint64_t create_lookup_srv_request_time = 0;
