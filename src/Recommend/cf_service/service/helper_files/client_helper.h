@@ -2,7 +2,7 @@
 #define __CLIENT_HELPER_H_INCLUDED__
 
 #include "protoc_files/cf.grpc.pb.h"
-
+#include <grpc++/grpc++.h>
 struct CFSrvTimingInfo {
     uint64_t create_cf_srv_request_time = 0;
     uint64_t unpack_cf_srv_req_time = 0;
