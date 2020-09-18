@@ -46,9 +46,15 @@ void CreateQueriesFromFile(std::string queries_file_name,
             } else {
                 value = s;
             }
-            queries->emplace_back(std::make_pair(key, value));
+
             itr++;
         }
+
+        queries->emplace_back(std::make_pair(key, value));
+    }
+    for (auto it = queries->begin(); it < queries->begin() + 10; it++)
+    {
+    std::cout << "key: " << it->first << "  value: " << it->second << std::endl;
     }
 }
 
