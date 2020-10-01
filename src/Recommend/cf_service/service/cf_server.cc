@@ -102,7 +102,7 @@ void ProcessRequest(CFRequest &request,
     start_time = GetTimeInMicro();
     end_time = GetTimeInMicro();
     int rand_num = rand() % 1000000;
-    while (end_time - start_time > rand_num)
+    while (end_time - start_time < rand_num)
     {
     	end_time = GetTimeInMicro();
     }
