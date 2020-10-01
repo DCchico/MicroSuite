@@ -6,22 +6,25 @@
 
 #include "router.pb.h"
 
-#include <grpc++/impl/codegen/async_stream.h>
-#include <grpc++/impl/codegen/async_unary_call.h>
-#include <grpc++/impl/codegen/method_handler_impl.h>
-#include <grpc++/impl/codegen/proto_utils.h>
-#include <grpc++/impl/codegen/rpc_method.h>
-#include <grpc++/impl/codegen/service_type.h>
-#include <grpc++/impl/codegen/status.h>
-#include <grpc++/impl/codegen/stub_options.h>
-#include <grpc++/impl/codegen/sync_stream.h>
-
-namespace grpc {
-class CompletionQueue;
-class Channel;
-class ServerCompletionQueue;
-class ServerContext;
-}  // namespace grpc
+#include <functional>
+#include <grpc/impl/codegen/port_platform.h>
+#include <grpcpp/impl/codegen/async_generic_service.h>
+#include <grpcpp/impl/codegen/async_stream.h>
+#include <grpcpp/impl/codegen/async_unary_call.h>
+#include <grpcpp/impl/codegen/client_callback.h>
+#include <grpcpp/impl/codegen/client_context.h>
+#include <grpcpp/impl/codegen/completion_queue.h>
+#include <grpcpp/impl/codegen/message_allocator.h>
+#include <grpcpp/impl/codegen/method_handler.h>
+#include <grpcpp/impl/codegen/proto_utils.h>
+#include <grpcpp/impl/codegen/rpc_method.h>
+#include <grpcpp/impl/codegen/server_callback.h>
+#include <grpcpp/impl/codegen/server_callback_handlers.h>
+#include <grpcpp/impl/codegen/server_context.h>
+#include <grpcpp/impl/codegen/service_type.h>
+#include <grpcpp/impl/codegen/status.h>
+#include <grpcpp/impl/codegen/stub_options.h>
+#include <grpcpp/impl/codegen/sync_stream.h>
 
 namespace router {
 
@@ -43,6 +46,32 @@ class RouterService final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::router::LookupResponse>> PrepareAsyncRouter(::grpc::ClientContext* context, const ::router::RouterRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::router::LookupResponse>>(PrepareAsyncRouterRaw(context, request, cq));
     }
+    class experimental_async_interface {
+     public:
+      virtual ~experimental_async_interface() {}
+      // Defining service between load generator and index.
+      // Input: Queries, number of nearest neighbors to compute.
+      // Output: K-nn
+      virtual void Router(::grpc::ClientContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Router(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::router::LookupResponse* response, std::function<void(::grpc::Status)>) = 0;
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      virtual void Router(::grpc::ClientContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      #else
+      virtual void Router(::grpc::ClientContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response, ::grpc::experimental::ClientUnaryReactor* reactor) = 0;
+      #endif
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      virtual void Router(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::router::LookupResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      #else
+      virtual void Router(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::router::LookupResponse* response, ::grpc::experimental::ClientUnaryReactor* reactor) = 0;
+      #endif
+    };
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    typedef class experimental_async_interface async_interface;
+    #endif
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    async_interface* async() { return experimental_async(); }
+    #endif
+    virtual class experimental_async_interface* experimental_async() { return nullptr; }
   private:
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::router::LookupResponse>* AsyncRouterRaw(::grpc::ClientContext* context, const ::router::RouterRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::router::LookupResponse>* PrepareAsyncRouterRaw(::grpc::ClientContext* context, const ::router::RouterRequest& request, ::grpc::CompletionQueue* cq) = 0;
@@ -57,9 +86,32 @@ class RouterService final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::router::LookupResponse>> PrepareAsyncRouter(::grpc::ClientContext* context, const ::router::RouterRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::router::LookupResponse>>(PrepareAsyncRouterRaw(context, request, cq));
     }
+    class experimental_async final :
+      public StubInterface::experimental_async_interface {
+     public:
+      void Router(::grpc::ClientContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response, std::function<void(::grpc::Status)>) override;
+      void Router(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::router::LookupResponse* response, std::function<void(::grpc::Status)>) override;
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      void Router(::grpc::ClientContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
+      #else
+      void Router(::grpc::ClientContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response, ::grpc::experimental::ClientUnaryReactor* reactor) override;
+      #endif
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      void Router(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::router::LookupResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
+      #else
+      void Router(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::router::LookupResponse* response, ::grpc::experimental::ClientUnaryReactor* reactor) override;
+      #endif
+     private:
+      friend class Stub;
+      explicit experimental_async(Stub* stub): stub_(stub) { }
+      Stub* stub() { return stub_; }
+      Stub* stub_;
+    };
+    class experimental_async_interface* experimental_async() override { return &async_stub_; }
 
    private:
     std::shared_ptr< ::grpc::ChannelInterface> channel_;
+    class experimental_async async_stub_{this};
     ::grpc::ClientAsyncResponseReader< ::router::LookupResponse>* AsyncRouterRaw(::grpc::ClientContext* context, const ::router::RouterRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::router::LookupResponse>* PrepareAsyncRouterRaw(::grpc::ClientContext* context, const ::router::RouterRequest& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_Router_;
@@ -78,7 +130,7 @@ class RouterService final {
   template <class BaseClass>
   class WithAsyncMethod_Router : public BaseClass {
    private:
-    void BaseClassMustBeDerivedFromService(const Service *service) {}
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_Router() {
       ::grpc::Service::MarkMethodAsync(0);
@@ -87,7 +139,7 @@ class RouterService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Router(::grpc::ServerContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response) final override {
+    ::grpc::Status Router(::grpc::ServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -97,9 +149,61 @@ class RouterService final {
   };
   typedef WithAsyncMethod_Router<Service > AsyncService;
   template <class BaseClass>
+  class ExperimentalWithCallbackMethod_Router : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    ExperimentalWithCallbackMethod_Router() {
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      ::grpc::Service::
+    #else
+      ::grpc::Service::experimental().
+    #endif
+        MarkMethodCallback(0,
+          new ::grpc_impl::internal::CallbackUnaryHandler< ::router::RouterRequest, ::router::LookupResponse>(
+            [this](
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+                   ::grpc::CallbackServerContext*
+    #else
+                   ::grpc::experimental::CallbackServerContext*
+    #endif
+                     context, const ::router::RouterRequest* request, ::router::LookupResponse* response) { return this->Router(context, request, response); }));}
+    void SetMessageAllocatorFor_Router(
+        ::grpc::experimental::MessageAllocator< ::router::RouterRequest, ::router::LookupResponse>* allocator) {
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+    #else
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::experimental().GetHandler(0);
+    #endif
+      static_cast<::grpc_impl::internal::CallbackUnaryHandler< ::router::RouterRequest, ::router::LookupResponse>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~ExperimentalWithCallbackMethod_Router() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Router(::grpc::ServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    virtual ::grpc::ServerUnaryReactor* Router(
+      ::grpc::CallbackServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/)
+    #else
+    virtual ::grpc::experimental::ServerUnaryReactor* Router(
+      ::grpc::experimental::CallbackServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/)
+    #endif
+      { return nullptr; }
+  };
+  #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  typedef ExperimentalWithCallbackMethod_Router<Service > CallbackService;
+  #endif
+
+  typedef ExperimentalWithCallbackMethod_Router<Service > ExperimentalCallbackService;
+  template <class BaseClass>
   class WithGenericMethod_Router : public BaseClass {
    private:
-    void BaseClassMustBeDerivedFromService(const Service *service) {}
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_Router() {
       ::grpc::Service::MarkMethodGeneric(0);
@@ -108,25 +212,90 @@ class RouterService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Router(::grpc::ServerContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response) final override {
+    ::grpc::Status Router(::grpc::ServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
   };
   template <class BaseClass>
+  class WithRawMethod_Router : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Router() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Router() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Router(::grpc::ServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRouter(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class ExperimentalWithRawCallbackMethod_Router : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    ExperimentalWithRawCallbackMethod_Router() {
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      ::grpc::Service::
+    #else
+      ::grpc::Service::experimental().
+    #endif
+        MarkMethodRawCallback(0,
+          new ::grpc_impl::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+                   ::grpc::CallbackServerContext*
+    #else
+                   ::grpc::experimental::CallbackServerContext*
+    #endif
+                     context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Router(context, request, response); }));
+    }
+    ~ExperimentalWithRawCallbackMethod_Router() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Router(::grpc::ServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    virtual ::grpc::ServerUnaryReactor* Router(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)
+    #else
+    virtual ::grpc::experimental::ServerUnaryReactor* Router(
+      ::grpc::experimental::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)
+    #endif
+      { return nullptr; }
+  };
+  template <class BaseClass>
   class WithStreamedUnaryMethod_Router : public BaseClass {
    private:
-    void BaseClassMustBeDerivedFromService(const Service *service) {}
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_Router() {
       ::grpc::Service::MarkMethodStreamed(0,
-        new ::grpc::internal::StreamedUnaryHandler< ::router::RouterRequest, ::router::LookupResponse>(std::bind(&WithStreamedUnaryMethod_Router<BaseClass>::StreamedRouter, this, std::placeholders::_1, std::placeholders::_2)));
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::router::RouterRequest, ::router::LookupResponse>(
+            [this](::grpc_impl::ServerContext* context,
+                   ::grpc_impl::ServerUnaryStreamer<
+                     ::router::RouterRequest, ::router::LookupResponse>* streamer) {
+                       return this->StreamedRouter(context,
+                         streamer);
+                  }));
     }
     ~WithStreamedUnaryMethod_Router() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable regular version of this method
-    ::grpc::Status Router(::grpc::ServerContext* context, const ::router::RouterRequest* request, ::router::LookupResponse* response) final override {
+    ::grpc::Status Router(::grpc::ServerContext* /*context*/, const ::router::RouterRequest* /*request*/, ::router::LookupResponse* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }

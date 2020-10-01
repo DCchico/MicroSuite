@@ -241,7 +241,7 @@ class RouterServiceClient {
             start_time = GetTimeInMicro();
 
             std::vector<std::pair<std::string, std::string> > queries;
-            CreateQueriesFromBinFile(queries_file_name,
+            CreateQueriesFromFile(queries_file_name,
                     &queries);
             end_time = GetTimeInMicro();
             timing_info.create_queries_time = end_time - start_time;

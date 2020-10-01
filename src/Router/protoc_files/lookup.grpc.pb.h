@@ -6,22 +6,25 @@
 
 #include "lookup.pb.h"
 
-#include <grpc++/impl/codegen/async_stream.h>
-#include <grpc++/impl/codegen/async_unary_call.h>
-#include <grpc++/impl/codegen/method_handler_impl.h>
-#include <grpc++/impl/codegen/proto_utils.h>
-#include <grpc++/impl/codegen/rpc_method.h>
-#include <grpc++/impl/codegen/service_type.h>
-#include <grpc++/impl/codegen/status.h>
-#include <grpc++/impl/codegen/stub_options.h>
-#include <grpc++/impl/codegen/sync_stream.h>
-
-namespace grpc {
-class CompletionQueue;
-class Channel;
-class ServerCompletionQueue;
-class ServerContext;
-}  // namespace grpc
+#include <functional>
+#include <grpc/impl/codegen/port_platform.h>
+#include <grpcpp/impl/codegen/async_generic_service.h>
+#include <grpcpp/impl/codegen/async_stream.h>
+#include <grpcpp/impl/codegen/async_unary_call.h>
+#include <grpcpp/impl/codegen/client_callback.h>
+#include <grpcpp/impl/codegen/client_context.h>
+#include <grpcpp/impl/codegen/completion_queue.h>
+#include <grpcpp/impl/codegen/message_allocator.h>
+#include <grpcpp/impl/codegen/method_handler.h>
+#include <grpcpp/impl/codegen/proto_utils.h>
+#include <grpcpp/impl/codegen/rpc_method.h>
+#include <grpcpp/impl/codegen/server_callback.h>
+#include <grpcpp/impl/codegen/server_callback_handlers.h>
+#include <grpcpp/impl/codegen/server_context.h>
+#include <grpcpp/impl/codegen/service_type.h>
+#include <grpcpp/impl/codegen/status.h>
+#include <grpcpp/impl/codegen/stub_options.h>
+#include <grpcpp/impl/codegen/sync_stream.h>
 
 namespace lookup {
 
@@ -40,6 +43,29 @@ class LookupService final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::lookup::Value>> PrepareAsyncKeyLookup(::grpc::ClientContext* context, const ::lookup::Key& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::lookup::Value>>(PrepareAsyncKeyLookupRaw(context, request, cq));
     }
+    class experimental_async_interface {
+     public:
+      virtual ~experimental_async_interface() {}
+      virtual void KeyLookup(::grpc::ClientContext* context, const ::lookup::Key* request, ::lookup::Value* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void KeyLookup(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::lookup::Value* response, std::function<void(::grpc::Status)>) = 0;
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      virtual void KeyLookup(::grpc::ClientContext* context, const ::lookup::Key* request, ::lookup::Value* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      #else
+      virtual void KeyLookup(::grpc::ClientContext* context, const ::lookup::Key* request, ::lookup::Value* response, ::grpc::experimental::ClientUnaryReactor* reactor) = 0;
+      #endif
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      virtual void KeyLookup(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::lookup::Value* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      #else
+      virtual void KeyLookup(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::lookup::Value* response, ::grpc::experimental::ClientUnaryReactor* reactor) = 0;
+      #endif
+    };
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    typedef class experimental_async_interface async_interface;
+    #endif
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    async_interface* async() { return experimental_async(); }
+    #endif
+    virtual class experimental_async_interface* experimental_async() { return nullptr; }
   private:
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::lookup::Value>* AsyncKeyLookupRaw(::grpc::ClientContext* context, const ::lookup::Key& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::lookup::Value>* PrepareAsyncKeyLookupRaw(::grpc::ClientContext* context, const ::lookup::Key& request, ::grpc::CompletionQueue* cq) = 0;
@@ -54,9 +80,32 @@ class LookupService final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::lookup::Value>> PrepareAsyncKeyLookup(::grpc::ClientContext* context, const ::lookup::Key& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::lookup::Value>>(PrepareAsyncKeyLookupRaw(context, request, cq));
     }
+    class experimental_async final :
+      public StubInterface::experimental_async_interface {
+     public:
+      void KeyLookup(::grpc::ClientContext* context, const ::lookup::Key* request, ::lookup::Value* response, std::function<void(::grpc::Status)>) override;
+      void KeyLookup(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::lookup::Value* response, std::function<void(::grpc::Status)>) override;
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      void KeyLookup(::grpc::ClientContext* context, const ::lookup::Key* request, ::lookup::Value* response, ::grpc::ClientUnaryReactor* reactor) override;
+      #else
+      void KeyLookup(::grpc::ClientContext* context, const ::lookup::Key* request, ::lookup::Value* response, ::grpc::experimental::ClientUnaryReactor* reactor) override;
+      #endif
+      #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      void KeyLookup(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::lookup::Value* response, ::grpc::ClientUnaryReactor* reactor) override;
+      #else
+      void KeyLookup(::grpc::ClientContext* context, const ::grpc::ByteBuffer* request, ::lookup::Value* response, ::grpc::experimental::ClientUnaryReactor* reactor) override;
+      #endif
+     private:
+      friend class Stub;
+      explicit experimental_async(Stub* stub): stub_(stub) { }
+      Stub* stub() { return stub_; }
+      Stub* stub_;
+    };
+    class experimental_async_interface* experimental_async() override { return &async_stub_; }
 
    private:
     std::shared_ptr< ::grpc::ChannelInterface> channel_;
+    class experimental_async async_stub_{this};
     ::grpc::ClientAsyncResponseReader< ::lookup::Value>* AsyncKeyLookupRaw(::grpc::ClientContext* context, const ::lookup::Key& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::lookup::Value>* PrepareAsyncKeyLookupRaw(::grpc::ClientContext* context, const ::lookup::Key& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_KeyLookup_;
@@ -72,7 +121,7 @@ class LookupService final {
   template <class BaseClass>
   class WithAsyncMethod_KeyLookup : public BaseClass {
    private:
-    void BaseClassMustBeDerivedFromService(const Service *service) {}
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_KeyLookup() {
       ::grpc::Service::MarkMethodAsync(0);
@@ -81,7 +130,7 @@ class LookupService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status KeyLookup(::grpc::ServerContext* context, const ::lookup::Key* request, ::lookup::Value* response) final override {
+    ::grpc::Status KeyLookup(::grpc::ServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -91,9 +140,61 @@ class LookupService final {
   };
   typedef WithAsyncMethod_KeyLookup<Service > AsyncService;
   template <class BaseClass>
+  class ExperimentalWithCallbackMethod_KeyLookup : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    ExperimentalWithCallbackMethod_KeyLookup() {
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      ::grpc::Service::
+    #else
+      ::grpc::Service::experimental().
+    #endif
+        MarkMethodCallback(0,
+          new ::grpc_impl::internal::CallbackUnaryHandler< ::lookup::Key, ::lookup::Value>(
+            [this](
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+                   ::grpc::CallbackServerContext*
+    #else
+                   ::grpc::experimental::CallbackServerContext*
+    #endif
+                     context, const ::lookup::Key* request, ::lookup::Value* response) { return this->KeyLookup(context, request, response); }));}
+    void SetMessageAllocatorFor_KeyLookup(
+        ::grpc::experimental::MessageAllocator< ::lookup::Key, ::lookup::Value>* allocator) {
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+    #else
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::experimental().GetHandler(0);
+    #endif
+      static_cast<::grpc_impl::internal::CallbackUnaryHandler< ::lookup::Key, ::lookup::Value>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~ExperimentalWithCallbackMethod_KeyLookup() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status KeyLookup(::grpc::ServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    virtual ::grpc::ServerUnaryReactor* KeyLookup(
+      ::grpc::CallbackServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/)
+    #else
+    virtual ::grpc::experimental::ServerUnaryReactor* KeyLookup(
+      ::grpc::experimental::CallbackServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/)
+    #endif
+      { return nullptr; }
+  };
+  #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  typedef ExperimentalWithCallbackMethod_KeyLookup<Service > CallbackService;
+  #endif
+
+  typedef ExperimentalWithCallbackMethod_KeyLookup<Service > ExperimentalCallbackService;
+  template <class BaseClass>
   class WithGenericMethod_KeyLookup : public BaseClass {
    private:
-    void BaseClassMustBeDerivedFromService(const Service *service) {}
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_KeyLookup() {
       ::grpc::Service::MarkMethodGeneric(0);
@@ -102,25 +203,90 @@ class LookupService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status KeyLookup(::grpc::ServerContext* context, const ::lookup::Key* request, ::lookup::Value* response) final override {
+    ::grpc::Status KeyLookup(::grpc::ServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
   };
   template <class BaseClass>
+  class WithRawMethod_KeyLookup : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_KeyLookup() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_KeyLookup() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status KeyLookup(::grpc::ServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestKeyLookup(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class ExperimentalWithRawCallbackMethod_KeyLookup : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    ExperimentalWithRawCallbackMethod_KeyLookup() {
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      ::grpc::Service::
+    #else
+      ::grpc::Service::experimental().
+    #endif
+        MarkMethodRawCallback(0,
+          new ::grpc_impl::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+                   ::grpc::CallbackServerContext*
+    #else
+                   ::grpc::experimental::CallbackServerContext*
+    #endif
+                     context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->KeyLookup(context, request, response); }));
+    }
+    ~ExperimentalWithRawCallbackMethod_KeyLookup() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status KeyLookup(::grpc::ServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+    virtual ::grpc::ServerUnaryReactor* KeyLookup(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)
+    #else
+    virtual ::grpc::experimental::ServerUnaryReactor* KeyLookup(
+      ::grpc::experimental::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)
+    #endif
+      { return nullptr; }
+  };
+  template <class BaseClass>
   class WithStreamedUnaryMethod_KeyLookup : public BaseClass {
    private:
-    void BaseClassMustBeDerivedFromService(const Service *service) {}
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_KeyLookup() {
       ::grpc::Service::MarkMethodStreamed(0,
-        new ::grpc::internal::StreamedUnaryHandler< ::lookup::Key, ::lookup::Value>(std::bind(&WithStreamedUnaryMethod_KeyLookup<BaseClass>::StreamedKeyLookup, this, std::placeholders::_1, std::placeholders::_2)));
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::lookup::Key, ::lookup::Value>(
+            [this](::grpc_impl::ServerContext* context,
+                   ::grpc_impl::ServerUnaryStreamer<
+                     ::lookup::Key, ::lookup::Value>* streamer) {
+                       return this->StreamedKeyLookup(context,
+                         streamer);
+                  }));
     }
     ~WithStreamedUnaryMethod_KeyLookup() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable regular version of this method
-    ::grpc::Status KeyLookup(::grpc::ServerContext* context, const ::lookup::Key* request, ::lookup::Value* response) final override {
+    ::grpc::Status KeyLookup(::grpc::ServerContext* /*context*/, const ::lookup::Key* /*request*/, ::lookup::Value* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }

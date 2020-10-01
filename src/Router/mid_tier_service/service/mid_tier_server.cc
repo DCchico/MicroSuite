@@ -357,13 +357,16 @@ class LookupServiceClient {
 #endif
                 uint64_t end_time = GetTimeInMicro();
                 // Make sure that the map entry corresponding to request id exists.
-                map_coarse_mutex.lock();
+                // Difei
+		
+	       	map_coarse_mutex.lock();
                 try {
-                    response_count_down_map.at(unique_request_id);
+                    map_fine_mutex.at(unique_request_id);
                 } catch( ... ) {
                     CHECK(false, "ERROR: Map entry corresponding to request id does not exist\n");
                 }
                 map_coarse_mutex.unlock();
+
 #ifndef NODEBUG
                 std::cout << "bef assigning lookup val\n";
 #endif
@@ -410,13 +413,15 @@ class LookupServiceClient {
                        by the server to the frontend.*/
                     uint64_t prev_rec = response_count_down_map[unique_request_id].router_reply->router_time();
                     response_count_down_map[unique_request_id].router_reply->set_router_time(prev_rec + (GetTimeInMicro() - s1));
-                    map_fine_mutex[unique_request_id]->unlock();
+		    // Difei
 
-                    map_coarse_mutex.lock();
+                    // map_coarse_mutex.lock();
                     server->Finish(unique_request_id, 
                             response_count_down_map[unique_request_id].router_reply);
-                    map_coarse_mutex.unlock();
-                }
+                    // map_coarse_mutex.unlock();
+                
+                    map_fine_mutex[unique_request_id]->unlock();
+		}
             } else {
                 CHECK(false, "lookup_srv does not exist\n");
             }
@@ -459,15 +464,17 @@ class LookupServiceClient {
                unique request.*/
             // Declare the size of the final response that the map must hold.
             map_coarse_mutex.lock();
-            ResponseMetaData meta_data;
             response_count_down_map.erase(unique_request_id_value);
             map_fine_mutex.erase(unique_request_id_value);
             map_fine_mutex[unique_request_id_value] = std::make_unique<std::mutex>();
-            response_count_down_map[unique_request_id_value] = meta_data;
+
             map_coarse_mutex.unlock();
 
             map_fine_mutex[unique_request_id_value]->lock();
-            if (router_request.kill()) {
+            
+            ResponseMetaData meta_data;
+            response_count_down_map[unique_request_id_value] = meta_data;
+	    if (router_request.kill()) {
                 kill_signal = true;
                 response_count_down_map[unique_request_id_value].router_reply->set_kill_ack(true);
                 server->Finish(unique_request_id_value,
@@ -707,6 +714,8 @@ class LookupServiceClient {
                 for(int j = 0; j < number_of_lookup_servers; j++)
                 {
                     std::string ip = lookup_server_ips[j];
+		    // Difei debugging
+		    std::cout << ip << std::endl;
                     lookup_srv_connections.emplace_back(new LookupServiceClient(grpc::CreateChannel(
                                     ip, grpc::InsecureChannelCredentials())));
                 }

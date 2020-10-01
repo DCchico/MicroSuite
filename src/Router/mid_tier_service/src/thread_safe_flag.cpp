@@ -21,7 +21,7 @@ class ThreadSafeFlag
         {
             std::unique_lock<std::mutex> mlock(mutex_);
             flag_ = true;
-            mlock.unlock();
+//            mlock.unlock();
             cond_.notify_all();
         }
 
@@ -29,7 +29,7 @@ class ThreadSafeFlag
         {
             std::unique_lock<std::mutex> mlock(mutex_);
             flag_ = false;
-            mlock.unlock();
+//            mlock.unlock();
         }
 
 
