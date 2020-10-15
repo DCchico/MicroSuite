@@ -434,6 +434,19 @@ class CFServiceClient {
         CompletionQueue cq_;
         };
 
+        /* The request processing thread runs this 
+           function. It checks all the cf_srv socket connections one by
+           one to see if there is a response. If there is one, it then
+           implements the count down mechanism in the global map.*/
+        void ProcessResponses(uint64_t unique_request_id_value)
+        {
+            while(true)
+            {
+                cf_srv_connections[0]->AsyncCompleteRpc(unique_request_id_value);
+            }
+
+        }
+
         void ProcessRequest(RecommenderRequest &recommender_request, 
                 uint64_t unique_request_id_value,
                 int tid)
@@ -533,19 +546,6 @@ class CFServiceClient {
             response_count_down_map[unique_request_id_value].recommender_reply->set_recommender_time(e1);
             map_fine_mutex[unique_request_id_value]->unlock();
             ProcessResponses(unique_request_id_value);
-        }
-
-        /* The request processing thread runs this 
-           function. It checks all the cf_srv socket connections one by
-           one to see if there is a response. If there is one, it then
-           implements the count down mechanism in the global map.*/
-        void ProcessResponses(uint64_t unique_request_id_value)
-        {
-            while(true)
-            {
-                cf_srv_connections[0]->AsyncCompleteRpc(unique_request_id_value);
-            }
-
         }
 
         void FinalKill()
