@@ -309,7 +309,7 @@ class CFServiceClient {
 
         // Loop while listening for completed responses.
         // Prints out the response from the server.
-        void AsyncCompleteRpc() {
+        void AsyncCompleteRpc(uint64_t unique_request_id_value) {
             void* got_tag;
             bool ok = false;
             cf_srv_cq->Next(&got_tag, &ok);
@@ -323,7 +323,7 @@ class CFServiceClient {
             // corresponds solely to the request for updates introduced by Finish().
             //GPR_ASSERT(ok);
 
-            if (call->status.ok())
+            if (call->status.ok() && call->reply.request_id() == unique_request_id_value)
             {
                 uint64_t s1 = GetTimeInMicro();
                 uint64_t unique_request_id = call->reply.request_id();
@@ -532,17 +532,18 @@ class CFServiceClient {
             e1 = GetTimeInMicro() - s1;
             response_count_down_map[unique_request_id_value].recommender_reply->set_recommender_time(e1);
             map_fine_mutex[unique_request_id_value]->unlock();
+            ProcessRequest();
         }
 
         /* The request processing thread runs this 
            function. It checks all the cf_srv socket connections one by
            one to see if there is a response. If there is one, it then
            implements the count down mechanism in the global map.*/
-        void ProcessResponses()
+        void ProcessResponses(uint64_t unique_request_id_value)
         {
             while(true)
             {
-                cf_srv_connections[0]->AsyncCompleteRpc();
+                cf_srv_connections[0]->AsyncCompleteRpc(uint64_t unique_request_id_value);
             }
 
         }
@@ -698,11 +699,11 @@ class CFServiceClient {
             std::thread runqlat(Runqlat);
             //std::thread hitm(Hitm);
             std::thread tcpretrans(Tcpretrans);
-
-            for(unsigned int i = 0; i < number_of_response_threads; i++)
-            {
-                response_threads.emplace_back(std::thread(ProcessResponses));
-            }
+// Difei
+            // for(unsigned int i = 0; i < number_of_response_threads; i++)
+            // {
+            //     response_threads.emplace_back(std::thread(ProcessResponses));
+            // }
 
             std::thread kill_ack = std::thread(FinalKill);
 
