@@ -532,7 +532,7 @@ class CFServiceClient {
             e1 = GetTimeInMicro() - s1;
             response_count_down_map[unique_request_id_value].recommender_reply->set_recommender_time(e1);
             map_fine_mutex[unique_request_id_value]->unlock();
-            ProcessRequest();
+            ProcessResponses(unique_request_id_value);
         }
 
         /* The request processing thread runs this 
@@ -543,7 +543,7 @@ class CFServiceClient {
         {
             while(true)
             {
-                cf_srv_connections[0]->AsyncCompleteRpc(uint64_t unique_request_id_value);
+                cf_srv_connections[0]->AsyncCompleteRpc(unique_request_id_value);
             }
 
         }
