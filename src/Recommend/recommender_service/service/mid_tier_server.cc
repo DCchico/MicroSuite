@@ -309,7 +309,8 @@ class CFServiceClient {
 
         // Loop while listening for completed responses.
         // Prints out the response from the server.
-        void AsyncCompleteRpc(uint64_t unique_request_id_value) {
+        bool AsyncCompleteRpc(uint64_t unique_request_id_value) {
+            bool rc = false;
             void* got_tag;
             bool ok = false;
             cf_srv_cq->Next(&got_tag, &ok);
@@ -325,6 +326,7 @@ class CFServiceClient {
 
             if (call->status.ok() && call->reply.request_id() == unique_request_id_value)
             {
+                rc = true;
                 uint64_t s1 = GetTimeInMicro();
                 uint64_t unique_request_id = call->reply.request_id();
                 /* When this is not the last response, we need to decrement the count
@@ -410,6 +412,7 @@ class CFServiceClient {
             }
             // Once we're complete, deallocate the call object.
             delete call;
+            return rc;
         }
 
             private:
@@ -440,11 +443,7 @@ class CFServiceClient {
            implements the count down mechanism in the global map.*/
         void ProcessResponses(uint64_t unique_request_id_value)
         {
-            while(true)
-            {
-                cf_srv_connections[0]->AsyncCompleteRpc(unique_request_id_value);
-            }
-
+            while(!cf_srv_connections[0]->AsyncCompleteRpc(unique_request_id_value));
         }
 
         void ProcessRequest(RecommenderRequest &recommender_request, 
