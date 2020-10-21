@@ -329,6 +329,7 @@ class CFServiceClient {
             bool f = true;
             while(f)
             {
+                cq_mutex.lock();
                 for (auto x: return_calls)
                 {
                     AsyncClientCall* c = static_cast<AsyncClientCall*>(x);
@@ -339,6 +340,7 @@ class CFServiceClient {
                         break;
                     }
                 }
+                cq_mutex.unlock();
             }
             if (call->status.ok())
             {
