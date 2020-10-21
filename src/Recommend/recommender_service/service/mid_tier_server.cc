@@ -331,11 +331,11 @@ class CFServiceClient {
             {
                 for (auto x: return_calls)
                 {
-                    x = static_cast<AsyncClientCall*>(x);
-                    if (x->reply.request_id() == unique_request_id_value)
+                    AsyncClientCall* c = static_cast<AsyncClientCall*>(x);
+                    if (c->reply.request_id() == unique_request_id_value)
                     {
                         f = false;
-                        call = x;
+                        call = c;
                         break;
                     }
                 }
