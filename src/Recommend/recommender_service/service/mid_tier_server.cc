@@ -66,11 +66,12 @@ ThreadSafeQueue<bool> kill_notify;
 /* Fine grained locking while looking at individual responses from
    multiple cf_srv servers. Coarse grained locking when we want to add
    or remove an element from the map.*/
-std::mutex response_map_mutex, thread_id, cf_server_id_mutex, map_coarse_mutex;
+std::mutex response_map_mutex, thread_id, cf_server_id_mutex, map_coarse_mutex, cq_mutex;
 std::vector<mutex_wrapper> cf_srv_conn_mutex;
 std::map<uint64_t, std::unique_ptr<std::mutex> > map_fine_mutex;
 int get_profile_stats = 0;
 bool first_req = false;
+std::vector<AsyncClientCall *> return_calls;
 
 CompletionQueue* cf_srv_cq = new CompletionQueue();
 
@@ -319,96 +320,107 @@ class CFServiceClient {
             //if (r == ServerCompletionQueue::GOT_EVENT) {
             // The tag in this example is the memory location of the call object
             AsyncClientCall* call = static_cast<AsyncClientCall*>(got_tag);
-
+            cq_mutex->lock();
+            return_calls.emplace_back(call);
+            cq_mutex->unlock();
             // Verify that the request was completed successfully. Note that "ok"
             // corresponds solely to the request for updates introduced by Finish().
             //GPR_ASSERT(ok);
-
+            bool f = true;
+            while(f)
+            {
+                for (auto x: return_calls)
+                {
+                    if (x->reply.request_id() == unique_request_id_value)
+                    {
+                        f = false;
+                        call = x;
+                        break;
+                    }
+                }
+            }
             if (call->status.ok())
             {
-                if (call->reply.request_id() == unique_request_id_value)
-                {
-                    rc = true;
-                    uint64_t s1 = GetTimeInMicro();
-                    uint64_t unique_request_id = call->reply.request_id();
-                    /* When this is not the last response, we need to decrement the count
-                    as well as collect response meta data - knn answer, cf_srv util, and
-                    cf_srv timing info.
-                    When this is the last request, we remove this request from the map and 
-                    merge responses from all cf_srvs.*/
-                    /* Create local DistCalc, CFSrvTimingInfo, CFSrvUtil variables,
-                    so that this thread can unpack received cf_srv data into these variables
-                    and then grab a lock to append to the response array in the map.*/
-                    uint64_t start_time = GetTimeInMicro();
-                    float rating = 0.0;
-                    CFSrvTimingInfo cf_srv_timing_info;
-                    CFSrvUtil cf_srv_util;
-                    UnpackCFServiceResponse(call->reply,
-                            &rating,     
-                            &cf_srv_timing_info,
-                            &cf_srv_util);
-                    uint64_t end_time = GetTimeInMicro();
-                    // Make sure that the map entry corresponding to request id exists.
+                rc = true;
+                uint64_t s1 = GetTimeInMicro();
+                uint64_t unique_request_id = call->reply.request_id();
+                /* When this is not the last response, we need to decrement the count
+                as well as collect response meta data - knn answer, cf_srv util, and
+                cf_srv timing info.
+                When this is the last request, we remove this request from the map and 
+                merge responses from all cf_srvs.*/
+                /* Create local DistCalc, CFSrvTimingInfo, CFSrvUtil variables,
+                so that this thread can unpack received cf_srv data into these variables
+                and then grab a lock to append to the response array in the map.*/
+                uint64_t start_time = GetTimeInMicro();
+                float rating = 0.0;
+                CFSrvTimingInfo cf_srv_timing_info;
+                CFSrvUtil cf_srv_util;
+                UnpackCFServiceResponse(call->reply,
+                        &rating,     
+                        &cf_srv_timing_info,
+                        &cf_srv_util);
+                uint64_t end_time = GetTimeInMicro();
+                // Make sure that the map entry corresponding to request id exists.
+                map_coarse_mutex.lock();
+                try {
+                    response_count_down_map.at(unique_request_id);
+                } catch( ... ) {
+                    CHECK(false, "ERROR: Map entry corresponding to request id does not exist\n");
+                }
+                map_coarse_mutex.unlock();
+
+                map_fine_mutex[unique_request_id]->lock();
+                int cf_srv_resp_id = response_count_down_map[unique_request_id].responses_recvd;
+                *(response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].rating) = rating;
+                *(response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].cf_srv_timing_info) = cf_srv_timing_info;
+                *(response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].cf_srv_util) = cf_srv_util;
+                response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].cf_srv_timing_info->unpack_cf_srv_resp_time = end_time - start_time;
+                
+                uint64_t total_time = response_count_down_map[unique_request_id].recommender_reply->total_calc_time();
+                response_count_down_map[unique_request_id].recommender_reply->set_total_calc_time(cf_srv_timing_info.cf_srv_time + total_time);
+
+                if (response_count_down_map[unique_request_id].responses_recvd != (number_of_cf_servers - 1)) {
+                    response_count_down_map[unique_request_id].responses_recvd++;
+                    map_fine_mutex[unique_request_id]->unlock();
+
+                } else {
+                    uint64_t cf_srv_resp_start_time = response_count_down_map[unique_request_id].recommender_reply->get_cf_srv_responses_time();
+                    response_count_down_map[unique_request_id].recommender_reply->set_get_cf_srv_responses_time(GetTimeInMicro() - cf_srv_resp_start_time);
+                    /* Time to merge all responses received and then 
+                    call terminate so that the response can be sent back
+                    to the load generator.*/
+                    /* We now know that all cf_srvs have responded, hence we can 
+                    proceed to merge responses.*/
+
+                    /* We now know that all cf_srvs have responded, hence we can 
+                    proceed to merge responses.*/
+
+                    start_time = GetTimeInMicro();
+
+                    MergeAndPack(response_count_down_map[unique_request_id].response_data,
+                            number_of_cf_servers,
+                            response_count_down_map[unique_request_id].recommender_reply);
+
+                    end_time = GetTimeInMicro();
+                    // response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(end_time - start_time);
+                    response_count_down_map[unique_request_id].recommender_reply->set_pack_recommender_resp_time(end_time - start_time); 
+                    //uint64_t recommender_time = response_count_down_map[unique_request_id].recommender_reply->recommender_time();
+                    //uint64_t total_time = response_count_down_map[unique_request_id].recommender_reply->total_calc_time();
+                    //response_count_down_map[unique_request_id].recommender_reply->set_total_calc_time(total_time + (GetTimeInMicro() - recommender_time));
+                    // response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(GetTimeInMicro() - recommender_time);
+                    //response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(recommender_times[unique_request_id]);
+                    /* Call server finish for this particular request,
+                    and pass the response so that it can be sent
+                    by the server to the frontend.*/
+                    uint64_t prev_rec = response_count_down_map[unique_request_id].recommender_reply->recommender_time();
+                    response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(prev_rec + (GetTimeInMicro() - s1));
+                    map_fine_mutex[unique_request_id]->unlock();
+
                     map_coarse_mutex.lock();
-                    try {
-                        response_count_down_map.at(unique_request_id);
-                    } catch( ... ) {
-                        CHECK(false, "ERROR: Map entry corresponding to request id does not exist\n");
-                    }
+                    server->Finish(unique_request_id, 
+                            response_count_down_map[unique_request_id].recommender_reply);
                     map_coarse_mutex.unlock();
-
-                    map_fine_mutex[unique_request_id]->lock();
-                    int cf_srv_resp_id = response_count_down_map[unique_request_id].responses_recvd;
-                    *(response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].rating) = rating;
-                    *(response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].cf_srv_timing_info) = cf_srv_timing_info;
-                    *(response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].cf_srv_util) = cf_srv_util;
-                    response_count_down_map[unique_request_id].response_data[cf_srv_resp_id].cf_srv_timing_info->unpack_cf_srv_resp_time = end_time - start_time;
-                    
-                    uint64_t total_time = response_count_down_map[unique_request_id].recommender_reply->total_calc_time();
-                    response_count_down_map[unique_request_id].recommender_reply->set_total_calc_time(cf_srv_timing_info.cf_srv_time + total_time);
-
-                    if (response_count_down_map[unique_request_id].responses_recvd != (number_of_cf_servers - 1)) {
-                        response_count_down_map[unique_request_id].responses_recvd++;
-                        map_fine_mutex[unique_request_id]->unlock();
-
-                    } else {
-                        uint64_t cf_srv_resp_start_time = response_count_down_map[unique_request_id].recommender_reply->get_cf_srv_responses_time();
-                        response_count_down_map[unique_request_id].recommender_reply->set_get_cf_srv_responses_time(GetTimeInMicro() - cf_srv_resp_start_time);
-                        /* Time to merge all responses received and then 
-                        call terminate so that the response can be sent back
-                        to the load generator.*/
-                        /* We now know that all cf_srvs have responded, hence we can 
-                        proceed to merge responses.*/
-
-                        /* We now know that all cf_srvs have responded, hence we can 
-                        proceed to merge responses.*/
-
-                        start_time = GetTimeInMicro();
-
-                        MergeAndPack(response_count_down_map[unique_request_id].response_data,
-                                number_of_cf_servers,
-                                response_count_down_map[unique_request_id].recommender_reply);
-
-                        end_time = GetTimeInMicro();
-                        // response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(end_time - start_time);
-                        response_count_down_map[unique_request_id].recommender_reply->set_pack_recommender_resp_time(end_time - start_time); 
-                        //uint64_t recommender_time = response_count_down_map[unique_request_id].recommender_reply->recommender_time();
-                        //uint64_t total_time = response_count_down_map[unique_request_id].recommender_reply->total_calc_time();
-                        //response_count_down_map[unique_request_id].recommender_reply->set_total_calc_time(total_time + (GetTimeInMicro() - recommender_time));
-                        // response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(GetTimeInMicro() - recommender_time);
-                        //response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(recommender_times[unique_request_id]);
-                        /* Call server finish for this particular request,
-                        and pass the response so that it can be sent
-                        by the server to the frontend.*/
-                        uint64_t prev_rec = response_count_down_map[unique_request_id].recommender_reply->recommender_time();
-                        response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(prev_rec + (GetTimeInMicro() - s1));
-                        map_fine_mutex[unique_request_id]->unlock();
-
-                        map_coarse_mutex.lock();
-                        server->Finish(unique_request_id, 
-                                response_count_down_map[unique_request_id].recommender_reply);
-                        map_coarse_mutex.unlock();
-                    }
                 }
             } 
             else 
