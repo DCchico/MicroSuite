@@ -61,6 +61,7 @@ std::vector<CFServiceClient*> cf_srv_connections;
    thread can access it after it has merged all responses.*/
 ServerImpl* server;
 ResponseMap response_count_down_map;
+std::vector<AsyncClientCall*> return_calls;
 
 ThreadSafeQueue<bool> kill_notify;
 /* Fine grained locking while looking at individual responses from
@@ -71,7 +72,6 @@ std::vector<mutex_wrapper> cf_srv_conn_mutex;
 std::map<uint64_t, std::unique_ptr<std::mutex> > map_fine_mutex;
 int get_profile_stats = 0;
 bool first_req = false;
-std::vector<AsyncClientCall *> return_calls;
 
 CompletionQueue* cf_srv_cq = new CompletionQueue();
 
@@ -320,9 +320,9 @@ class CFServiceClient {
             //if (r == ServerCompletionQueue::GOT_EVENT) {
             // The tag in this example is the memory location of the call object
             AsyncClientCall* call = static_cast<AsyncClientCall*>(got_tag);
-            cq_mutex->lock();
-            return_calls.emplace_back(call);
-            cq_mutex->unlock();
+            cq_mutex.lock();
+            return_calls.push_back(call);
+            cq_mutex.unlock();
             // Verify that the request was completed successfully. Note that "ok"
             // corresponds solely to the request for updates introduced by Finish().
             //GPR_ASSERT(ok);
@@ -432,7 +432,6 @@ class CFServiceClient {
             return rc;
         }
 
-            private:
         // struct for keeping state and data information
         struct AsyncClientCall {
             // Container for the data we expect from the server.
