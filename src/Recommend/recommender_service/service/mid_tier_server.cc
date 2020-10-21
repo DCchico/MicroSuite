@@ -331,6 +331,7 @@ class CFServiceClient {
             {
                 for (auto x: return_calls)
                 {
+                    x = static_cast<AsyncClientCall*>(x);
                     if (x->reply.request_id() == unique_request_id_value)
                     {
                         f = false;
