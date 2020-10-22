@@ -432,7 +432,6 @@ class CFServiceClient {
                 CHECK(false, "cf_srv does not exist\n");
             }
             // Once we're complete, deallocate the call object.
-            delete call;
             return rc;
         }
 
