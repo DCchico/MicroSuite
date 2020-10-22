@@ -403,7 +403,8 @@ class CFServiceClient {
                     cq_mutex.lock();
                     for (auto x = return_calls.begin(); x != return_calls.end(); x++)
                     {
-                        if ((*x)->reply.request_id() == unique_request_id_value)
+                        AsyncClientCall* c = static_cast<AsyncClientCall*>(*x);
+                        if (c->reply.request_id() == unique_request_id_value)
                         {
                             return_calls.erase(x);
                             break;
