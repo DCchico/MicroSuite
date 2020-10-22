@@ -330,14 +330,13 @@ class CFServiceClient {
             while(f)
             {
                 
-                for (auto x = return_calls.begin(); x != return_calls.end(); x++)
+                for (auto x : return_calls)
                 {
                     cq_mutex.lock();
-                    AsyncClientCall* c = static_cast<AsyncClientCall*>(*x);
+                    AsyncClientCall* c = static_cast<AsyncClientCall*>(x);
                     if (c->reply.request_id() == unique_request_id_value)
                     {
                         f = false;
-                        return_calls.erase(x);
                         call = c;
                         break;
                     }
@@ -402,7 +401,17 @@ class CFServiceClient {
                     proceed to merge responses.*/
 
                     start_time = GetTimeInMicro();
-
+                    cq_mutex.lock();
+                    for (auto x = return_calls.begin(); x != return_calls.end(); x++)
+                    {
+                        AsyncClientCall* c = static_cast<AsyncClientCall*>(*x);
+                        if (c->reply.request_id() == unique_request_id_value)
+                        {
+                            return_calls.erase(x);
+                            break;
+                        }
+                    }
+                    cq_mutex.unlock();
                     MergeAndPack(response_count_down_map[unique_request_id].response_data,
                             number_of_cf_servers,
                             response_count_down_map[unique_request_id].recommender_reply);
