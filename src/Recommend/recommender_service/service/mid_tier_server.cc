@@ -329,10 +329,10 @@ class CFServiceClient {
             bool f = true;
             while(f)
             {
-                
+                cq_mutex.lock();
                 for (auto x : return_calls)
                 {
-                    cq_mutex.lock();
+                    
                     AsyncClientCall* c = static_cast<AsyncClientCall*>(x);
                     if (c->reply.request_id() == unique_request_id_value)
                     {
@@ -340,8 +340,9 @@ class CFServiceClient {
                         call = c;
                         break;
                     }
-                    cq_mutex.unlock();
+                    
                 }
+                cq_mutex.unlock();
             }
             if (call->status.ok())
             {
