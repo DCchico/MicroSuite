@@ -400,19 +400,17 @@ class CFServiceClient {
 
                     /* We now know that all cf_srvs have responded, hence we can 
                     proceed to merge responses.*/
-
-                    start_time = GetTimeInMicro();
                     cq_mutex.lock();
                     for (auto x = return_calls.begin(); x != return_calls.end(); x++)
                     {
-                        AsyncClientCall* c = static_cast<AsyncClientCall*>(*x);
-                        if (c->reply.request_id() == unique_request_id_value)
+                        if ((*x)->reply.request_id() == unique_request_id_value)
                         {
                             return_calls.erase(x);
                             break;
                         }
                     }
                     cq_mutex.unlock();
+                    start_time = GetTimeInMicro();
                     MergeAndPack(response_count_down_map[unique_request_id].response_data,
                             number_of_cf_servers,
                             response_count_down_map[unique_request_id].recommender_reply);
