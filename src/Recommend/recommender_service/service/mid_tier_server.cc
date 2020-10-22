@@ -330,10 +330,10 @@ class CFServiceClient {
             while(f)
             {
                 
-                for (auto x: return_calls)
+                for (auto x = return_calls.begin(); x != return_calls.end(); x++)
                 {
                     cq_mutex.lock();
-                    AsyncClientCall* c = static_cast<AsyncClientCall*>(x);
+                    AsyncClientCall* c = static_cast<AsyncClientCall*>(*x);
                     if (c->reply.request_id() == unique_request_id_value)
                     {
                         f = false;
