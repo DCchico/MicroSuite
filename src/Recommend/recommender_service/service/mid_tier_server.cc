@@ -71,7 +71,7 @@ std::vector<mutex_wrapper> cf_srv_conn_mutex;
 std::map<uint64_t, std::unique_ptr<std::mutex> > map_fine_mutex;
 int get_profile_stats = 0;
 bool first_req = false;
-
+std::vector<void*> return_calls;
 CompletionQueue* cf_srv_cq = new CompletionQueue();
 
 bool kill_signal = false;
@@ -318,10 +318,10 @@ class CFServiceClient {
             //if (r == ServerCompletionQueue::TIMEOUT) return;
             //if (r == ServerCompletionQueue::GOT_EVENT) {
             // The tag in this example is the memory location of the call object
-            AsyncClientCall call_tmp = *(static_cast<AsyncClientCall*>(got_tag));
+            AsyncClientCall * call_tmp = static_cast<AsyncClientCall*>(got_tag);
             AsyncClientCall * call;
             cq_mutex.lock();
-            return_calls.push_back(call_tmp);
+            return_calls.push_back((void*)call_tmp);
             cq_mutex.unlock();
             // Verify that the request was completed successfully. Note that "ok"
             // corresponds solely to the request for updates introduced by Finish().
@@ -333,12 +333,11 @@ class CFServiceClient {
                 for (auto x = return_calls.begin(); x != return_calls.end(); x++)
                 {
                     
-                    AsyncClientCall * c = static_cast<AsyncClientCall>(&(*x));
+                    AsyncClientCall * c = static_cast<AsyncClientCall>(*x);
                     if (c->reply.request_id() == unique_request_id_value)
                     {
                         f = false;
                         call = c;
-                        return_calls.erase(x);
                         break;
                     }
                     
@@ -432,6 +431,19 @@ class CFServiceClient {
                 CHECK(false, "cf_srv does not exist\n");
             }
             // Once we're complete, deallocate the call object.
+            cq_mutex.lock();
+            for (auto x = return_calls.begin(); x != return_calls.end(); x++)
+            {
+                
+                AsyncClientCall * c = static_cast<AsyncClientCall>(*x);
+                if (c->reply.request_id() == unique_request_id_value)
+                {
+                    return_calls.erase(x);
+                    break;
+                }
+                
+            }
+            cq_mutex.unlock();
             return rc;
         }
 
@@ -446,7 +458,6 @@ class CFServiceClient {
             Status status;
             std::unique_ptr<ClientAsyncResponseReader<CFResponse>> response_reader;
         };
-        std::vector<AsyncClientCall> return_calls;
         // Out of the passed in Channel comes the stub, stored here, our view of the
         // server's exposed services.
         std::unique_ptr<CFService::Stub> stub_;
