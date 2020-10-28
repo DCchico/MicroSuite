@@ -71,7 +71,8 @@ std::vector<mutex_wrapper> cf_srv_conn_mutex;
 std::map<uint64_t, std::unique_ptr<std::mutex> > map_fine_mutex;
 int get_profile_stats = 0;
 bool first_req = false;
-
+// Difei
+// Add a thread safe queue here for quests and resps
 CompletionQueue* cf_srv_cq = new CompletionQueue();
 
 bool kill_signal = false;
