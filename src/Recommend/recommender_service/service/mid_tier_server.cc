@@ -73,6 +73,9 @@ int get_profile_stats = 0;
 bool first_req = false;
 // Difei
 // Add a thread safe queue here for quests and resps
+std::vector<ThreadSafeQueueReqWrapper> requests_to_leaf_srv_queue;
+std::vector<ThreadSafeQueueRespWrapper> resp_recvd_from_leaf_srv;
+
 CompletionQueue* cf_srv_cq = new CompletionQueue();
 
 bool kill_signal = false;
@@ -310,24 +313,40 @@ class CFServiceClient {
 
         // Loop while listening for completed responses.
         // Prints out the response from the server.
-        void AsyncCompleteRpc() {
-            void* got_tag;
-            bool ok = false;
-            cf_srv_cq->Next(&got_tag, &ok);
+        // Difei
+        void AsyncCompleteRpc(const uint32_t leaf_server_id, 
+                const uint64_t request_id,
+                const int mid_tier_tid,
+                CFRequest request_to_leaf) {
+            
+            // Create leaf request
+            // TODO: Check these two functions
+            request_to_leaf.set_leaf_server_id(leaf_server_id);
+            request_to_leaf.set_request_id(request_id);
+            // Container for the data we expect from the server.
+            CFResponse reply;
+            // Context for the client. 
+            ClientContext context;
+            // TODO: In the leaf server
+            Status status = stub_->Leaf(&context, request_to_leaf, &reply);
+
+            // void* got_tag;
+            // bool ok = false;
+            // cf_srv_cq->Next(&got_tag, &ok);
             //auto r = cq_.AsyncNext(&got_tag, &ok, gpr_time_0(GPR_CLOCK_REALTIME));
             //if (r == ServerCompletionQueue::TIMEOUT) return;
             //if (r == ServerCompletionQueue::GOT_EVENT) {
             // The tag in this example is the memory location of the call object
-            AsyncClientCall* call = static_cast<AsyncClientCall*>(got_tag);
+            // AsyncClientCall* call = static_cast<AsyncClientCall*>(got_tag);
 
             // Verify that the request was completed successfully. Note that "ok"
             // corresponds solely to the request for updates introduced by Finish().
             //GPR_ASSERT(ok);
 
-            if (call->status.ok())
+            if (status.ok())
             {
                 uint64_t s1 = GetTimeInMicro();
-                uint64_t unique_request_id = call->reply.request_id();
+                uint64_t unique_request_id = reply.request_id();
                 /* When this is not the last response, we need to decrement the count
                    as well as collect response meta data - knn answer, cf_srv util, and
                    cf_srv timing info.
@@ -340,7 +359,7 @@ class CFServiceClient {
                 float rating = 0.0;
                 CFSrvTimingInfo cf_srv_timing_info;
                 CFSrvUtil cf_srv_util;
-                UnpackCFServiceResponse(call->reply,
+                UnpackCFServiceResponse(reply,
                         &rating,     
                         &cf_srv_timing_info,
                         &cf_srv_util);
@@ -405,6 +424,8 @@ class CFServiceClient {
                     server->Finish(unique_request_id, 
                             response_count_down_map[unique_request_id].recommender_reply);
                     map_coarse_mutex.unlock();
+                    // Difei
+                    resp_recvd_from_leaf_srv[mid_tier_tid].push(true);
                 }
             } else {
                 CHECK(false, "cf_srv does not exist\n");
@@ -522,30 +543,51 @@ class CFServiceClient {
             response_count_down_map[unique_request_id_value].recommender_reply->set_get_cf_srv_responses_time(GetTimeInMicro());
             //map_fine_mutex[unique_request_id_value]->unlock();
 
+            // Difei
+            struct ThreadArgs* thread_args = new struct ThreadArgs[number_of_cf_servers];
+            struct ReqToCFSrv* req_to_leaf_srv = new struct ReqToCFSrv[number_of_cf_servers];
 
             for(unsigned int i = 0; i < number_of_cf_servers; i++) {
                 int index = (tid*number_of_cf_servers) + i;
-                cf_srv_connections[index]->GetRating(i,
-                        util_present,
-                        unique_request_id_value,
-                        request_to_cf_srv);
+                // cf_srv_connections[index]->GetRating(i,
+                //         util_present,
+                //         unique_request_id_value,
+                //         request_to_cf_srv);
+                CreateCFServiceRequest(i,
+                    util_present,
+                    &request_to_cf_srv);
+                request_to_cf_srv.set_request_id(unique_request_id_value);
+
+                req_to_leaf_srv[i].cf_server_id = i;
+                req_to_leaf_srv[i].request_id = unique_request_id_value;
+                req_to_leaf_srv[i].recommender_tid = tid;
+                req_to_leaf_srv[i].request_to_cf_srv = request_to_cf_srv;
+
+                requests_to_leaf_srv_queue[index].push(req_to_leaf_srv[i]);
             }
             e1 = GetTimeInMicro() - s1;
             response_count_down_map[unique_request_id_value].recommender_reply->set_recommender_time(e1);
             map_fine_mutex[unique_request_id_value]->unlock();
+
+            // Difei
+            resp_recvd_from_leaf_srv[mid_tier_tid].pop();      
         }
 
         /* The request processing thread runs this 
            function. It checks all the cf_srv socket connections one by
            one to see if there is a response. If there is one, it then
            implements the count down mechanism in the global map.*/
-        void ProcessResponses()
+        // Difei
+        void ProcessResponses(const int id)
         {
             while(true)
             {
-                cf_srv_connections[0]->AsyncCompleteRpc();
+                ReqToCFSrv req_to_leaf_srv = requests_to_leaf_srv_queue[id].pop();
+                cf_srv_connections[id]->AsyncCompleteRpc(req_to_leaf_srv.cf_server_id,
+                        req_to_leaf_srv.request_id,
+                        req_to_leaf_srv.recommender_tid,
+                        req_to_leaf_srv.request_to_cf_srv);
             }
-
         }
 
         void FinalKill()
@@ -674,17 +716,25 @@ class CFServiceClient {
                 ip = argv[3];
                 recommender_parallelism = atoi(argv[4]);
                 dispatch_parallelism = atoi(argv[5]);
-                number_of_response_threads = atoi(argv[6]);
+                // Difei
+                number_of_response_threads = dispatch_parallelism * number_of_cf_servers;
             } else {
                 CHECK(false, "<./recommender_server> <number of cf servers> <cf server ips file> <ip:port number> <recommender parallelism>\n");
             }
             // Load cf server IPs into a string vector
             GetCFServerIPs(cf_server_ips_file, &cf_server_ips);
 
+            // Difei: Init queues
+            requests_to_leaf_srv_queue.resize(dispatch_parallelism * number_of_cf_servers);
+            resp_recvd_from_leaf_srv.resize(dispatch_parallelism);
+            int idx;
+
             for(unsigned int i = 0; i < dispatch_parallelism; i++)
             {
                 for(unsigned int j = 0; j < number_of_cf_servers; j++)
                 {
+                    idx = i * dispatch_parallelism + j;
+                    response_threads.emplace_back(std::thread(ProcessResponses, idx));
                     std::string ip = cf_server_ips[j];
                     cf_srv_connections.emplace_back(new CFServiceClient(grpc::CreateChannel(
                                     ip, grpc::InsecureChannelCredentials())));
@@ -700,10 +750,11 @@ class CFServiceClient {
             //std::thread hitm(Hitm);
             std::thread tcpretrans(Tcpretrans);
 
-            for(unsigned int i = 0; i < number_of_response_threads; i++)
-            {
-                response_threads.emplace_back(std::thread(ProcessResponses));
-            }
+            // Difei
+            // for(unsigned int i = 0; i < number_of_response_threads; i++)
+            // {
+            //     response_threads.emplace_back(std::thread(ProcessResponses));
+            // }
 
             std::thread kill_ack = std::thread(FinalKill);
 

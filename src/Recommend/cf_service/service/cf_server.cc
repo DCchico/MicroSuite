@@ -159,7 +159,55 @@ class ServiceImpl final {
             {
                 HandleRpcs();
             }
-        }    
+        }
+
+        Status Leaf(ServerContext* context, const CFRequest* request,
+                CFResponse* reply) override 
+        {
+            //std::cout << leaf_server_number << " b " << GetTimeInMicro() << std::endl;
+            uint64_t begin = GetTimeInMicro();
+            uint64_t request_id = request->request_id();
+            /* If the index server is asking for util info,
+            it means the time period has expired, so 
+            the leaf must read /proc/stat to provide user, system, io, and idle times.*/
+            //printf("%p b %lu\n", request, GetTimeInMicro());
+#ifndef NODEBUG
+        std::cout << "before util\n";
+#endif
+            if(request->util_request().util_request())
+            {
+                uint64_t user_time = 0, system_time = 0, io_time = 0, idle_time = 0;
+                GetCpuTimes(&user_time,
+                        &system_time,
+                        &io_time,
+                        &idle_time);
+                reply->mutable_util_response()->set_user_time(user_time);
+                reply->mutable_util_response()->set_system_time(system_time);
+                reply->mutable_util_response()->set_io_time(io_time);
+                reply->mutable_util_response()->set_idle_time(idle_time);
+                reply->mutable_util_response()->set_util_present(true);
+            }
+#ifndef NODEBUG
+        std::cout << "after util\n";
+#endif
+            uint64_t start_time = 0, end_time = 0;
+
+            // Unpack received queries here.
+#ifndef NODEBUG
+        std::cout << "after unpack\n";
+#endif
+
+            // Perform leaf computations here.
+
+            // Pack leaf response here.
+
+#ifndef NODEBUG
+        std::cout << "setting status as ok\n";
+#endif
+            reply->set_send_stamp(GetTimeInMicro() - begin);
+            return Status::OK;
+            }
+
     private:
         // Class encompasing the state and logic needed to serve a request.
         class CallData {
