@@ -284,7 +284,8 @@ class CFServiceClient {
         void GetRating(const uint32_t cf_server_id,
                 const bool util_present,
                 uint64_t request_id,
-                CFRequest request_to_cf_srv)
+                CFRequest request_to_cf_srv,
+                int tid)
         {
             // Create RCP request by adding queries, point IDs, and number of NN.
             CreateCFServiceRequest(cf_server_id,
@@ -301,7 +302,7 @@ class CFServiceClient {
             // stub_->AsyncSayHello() performs the RPC call, returning an instance to
             // store in "call". Because we are using the asynchronous API, we need to
             // hold on to the "call" instance in order to get updates on the ongoing RPC.
-            call->response_reader = stub_->AsyncCF(&call->context, request_to_cf_srv, cf_srv_cq);
+            call->response_reader = stub_->AsyncCF(&call->context, request_to_cf_srv, cf_srv_cq[tid]);
             // Request that, upon completion of the RPC, "reply" be updated with the
             // server's response; "status" with the indication of whether the operation
             // was successful. Tag the request with the memory address of the call object.
@@ -529,7 +530,7 @@ class CFServiceClient {
                 cf_srv_connections[index]->GetRating(i,
                         util_present,
                         unique_request_id_value,
-                        request_to_cf_srv);
+                        request_to_cf_srv, tid);
             }
             e1 = GetTimeInMicro() - s1;
             response_count_down_map[unique_request_id_value].recommender_reply->set_recommender_time(e1);
