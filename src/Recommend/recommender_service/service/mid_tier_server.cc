@@ -72,7 +72,8 @@ std::map<uint64_t, std::unique_ptr<std::mutex> > map_fine_mutex;
 int get_profile_stats = 0;
 bool first_req = false;
 
-CompletionQueue* cf_srv_cq = new CompletionQueue();
+std::vector<CompletionQueue*> cf_srv_cq;
+std::vector<ThreadSafeQueueRespWrapper> resp_recvd_queue;
 
 bool kill_signal = false;
 
@@ -309,10 +310,10 @@ class CFServiceClient {
 
         // Loop while listening for completed responses.
         // Prints out the response from the server.
-        void AsyncCompleteRpc() {
+        void AsyncCompleteRpc(int tid) {
             void* got_tag;
             bool ok = false;
-            cf_srv_cq->Next(&got_tag, &ok);
+            cf_srv_cq[tid]->Next(&got_tag, &ok);
             //auto r = cq_.AsyncNext(&got_tag, &ok, gpr_time_0(GPR_CLOCK_REALTIME));
             //if (r == ServerCompletionQueue::TIMEOUT) return;
             //if (r == ServerCompletionQueue::GOT_EVENT) {
@@ -404,6 +405,7 @@ class CFServiceClient {
                     server->Finish(unique_request_id, 
                             response_count_down_map[unique_request_id].recommender_reply);
                     map_coarse_mutex.unlock();
+                    resp_recvd_queue[tid].push(true);
                 }
             } else {
                 CHECK(false, "cf_srv does not exist\n");
@@ -532,17 +534,19 @@ class CFServiceClient {
             e1 = GetTimeInMicro() - s1;
             response_count_down_map[unique_request_id_value].recommender_reply->set_recommender_time(e1);
             map_fine_mutex[unique_request_id_value]->unlock();
+            // Difei
+            resp_recvd_queue[tid].pop();
         }
 
         /* The request processing thread runs this 
            function. It checks all the cf_srv socket connections one by
            one to see if there is a response. If there is one, it then
            implements the count down mechanism in the global map.*/
-        void ProcessResponses()
+        void ProcessResponses(int tid)
         {
             while(true)
             {
-                cf_srv_connections[0]->AsyncCompleteRpc();
+                cf_srv_connections[0]->AsyncCompleteRpc(tid);
             }
 
         }
@@ -680,8 +684,10 @@ class CFServiceClient {
             // Load cf server IPs into a string vector
             GetCFServerIPs(cf_server_ips_file, &cf_server_ips);
 
+            resp_recvd_queue.resize(dispatch_parallelism);
             for(unsigned int i = 0; i < dispatch_parallelism; i++)
             {
+                cf_srv_cq.emplace_back(new CompletionQueue());
                 for(unsigned int j = 0; j < number_of_cf_servers; j++)
                 {
                     std::string ip = cf_server_ips[j];
@@ -699,9 +705,9 @@ class CFServiceClient {
             //std::thread hitm(Hitm);
             std::thread tcpretrans(Tcpretrans);
 
-            for(unsigned int i = 0; i < number_of_response_threads; i++)
+            for(unsigned int i = 0; i < dispatch_parallelism; i++)
             {
-                response_threads.emplace_back(std::thread(ProcessResponses));
+                response_threads.emplace_back(std::thread(ProcessResponses, i));
             }
 
             std::thread kill_ack = std::thread(FinalKill);
