@@ -144,29 +144,31 @@ class ServiceImpl final {
             builder.RegisterService(&service_);
             // Get hold of the completion queue used for the asynchronous communication
             // with the gRPC runtime.
-            cq_ = builder.AddCompletionQueue();
+            // cq_ = builder.AddCompletionQueue();
             // Finally assemble the server.
             server_ = builder.BuildAndStart();
             std::cout << "Server listening on " << server_address << std::endl;
             // Proceed to the server's main loop.
-            if (cf_parallelism == 1) {
-                HandleRpcs();
-            }
-            omp_set_dynamic(0);
-            omp_set_num_threads(cf_parallelism);
-            omp_set_nested(2);
-#pragma omp parallel
-            {
-                HandleRpcs();
-            }
+            // Difei
+//             if (cf_parallelism == 1) {
+//                 HandleRpcs();
+//             }
+//             omp_set_dynamic(0);
+//             omp_set_num_threads(cf_parallelism);
+//             omp_set_nested(2);
+// #pragma omp parallel
+//             {
+//                 HandleRpcs();
+//             }
+            server_->wait();
         }
 
         Status Leaf(ServerContext* context, const CFRequest* request,
                 CFResponse* reply) override 
         {
-            //std::cout << leaf_server_number << " b " << GetTimeInMicro() << std::endl;
-            uint64_t begin = GetTimeInMicro();
-            uint64_t request_id = request->request_id();
+            // std::cout << leaf_server_number << " b " << GetTimeInMicro() << std::endl;
+            // uint64_t begin = GetTimeInMicro();
+            // uint64_t request_id = request->request_id();
             /* If the index server is asking for util info,
             it means the time period has expired, so 
             the leaf must read /proc/stat to provide user, system, io, and idle times.*/
@@ -174,23 +176,23 @@ class ServiceImpl final {
 #ifndef NODEBUG
         std::cout << "before util\n";
 #endif
-            if(request->util_request().util_request())
-            {
-                uint64_t user_time = 0, system_time = 0, io_time = 0, idle_time = 0;
-                GetCpuTimes(&user_time,
-                        &system_time,
-                        &io_time,
-                        &idle_time);
-                reply->mutable_util_response()->set_user_time(user_time);
-                reply->mutable_util_response()->set_system_time(system_time);
-                reply->mutable_util_response()->set_io_time(io_time);
-                reply->mutable_util_response()->set_idle_time(idle_time);
-                reply->mutable_util_response()->set_util_present(true);
-            }
+            // if(request->util_request().util_request())
+            // {
+            //     uint64_t user_time = 0, system_time = 0, io_time = 0, idle_time = 0;
+            //     GetCpuTimes(&user_time,
+            //             &system_time,
+            //             &io_time,
+            //             &idle_time);
+            //     reply->mutable_util_response()->set_user_time(user_time);
+            //     reply->mutable_util_response()->set_system_time(system_time);
+            //     reply->mutable_util_response()->set_io_time(io_time);
+            //     reply->mutable_util_response()->set_idle_time(idle_time);
+            //     reply->mutable_util_response()->set_util_present(true);
+            // }
 #ifndef NODEBUG
         std::cout << "after util\n";
 #endif
-            uint64_t start_time = 0, end_time = 0;
+            // uint64_t start_time = 0, end_time = 0;
 
             // Unpack received queries here.
 #ifndef NODEBUG
@@ -204,7 +206,9 @@ class ServiceImpl final {
 #ifndef NODEBUG
         std::cout << "setting status as ok\n";
 #endif
-            reply->set_send_stamp(GetTimeInMicro() - begin);
+            // reply->set_send_stamp(GetTimeInMicro() - begin);
+            // Difei
+            ProcessRequest(request, reply);
             return Status::OK;
             }
 
