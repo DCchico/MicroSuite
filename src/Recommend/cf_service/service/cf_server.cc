@@ -41,85 +41,6 @@ unsigned int cf_parallelism = 0;
 int num_cores = 0, cf_server_number = 0, num_cf_servers = 0;
 CF* cf_matrix;
 
-void ProcessRequest(CFRequest &request,
-        CFResponse* reply)
-{
-    /* If the index server is asking for util info,
-       it means the time period has expired, so 
-       the cf must read /proc/stat to provide user, system, io, and idle times.*/
-    if(request.util_request().util_request())
-    {
-        uint64_t user_time = 0, system_time = 0, io_time = 0, idle_time = 0;
-        GetCpuTimes(&user_time,
-                &system_time,
-                &io_time,
-                &idle_time);
-        reply->mutable_util_response()->set_user_time(user_time);
-        reply->mutable_util_response()->set_system_time(system_time);
-        reply->mutable_util_response()->set_io_time(io_time);
-        reply->mutable_util_response()->set_idle_time(idle_time);
-        reply->mutable_util_response()->set_util_present(true);
-    }
-
-    /* Simply copy request id into the reply - this was just a 
-       piggyback message.*/
-    reply->set_request_id(request.request_id());
-
-    /* Get the current idle time and total time
-       so as to calculate the CPU util when the cf is done.*/
-    size_t idle_time_initial = 0, total_time_initial = 0, idle_time_final = 0, total_time_final = 0;
-    //GetCpuTimes(&idle_time_initial, &total_time_initial);
-
-    // Unpack received queries and point IDs
-    uint32_t cf_server_id, shard_size;
-    uint64_t start_time, end_time;
-    start_time = GetTimeInMicro();
-    Request user_item;
-    UnpackCFServiceRequest(request,
-            &user_item);
-
-    end_time = GetTimeInMicro();
-    reply->mutable_timing_data_in_micro()->set_unpack_cf_srv_req_time_in_micro((end_time - start_time));
-    /* Next piggy back message - sent the received query back to the 
-       index server. Helps to merge async responses.*/
-    // Remove duplicate point IDs.
-    //RemoveDuplicatePointIDs(point_ids_vec);
-
-    // Dataset dimension must be equal to queries dimension.
-#if 0
-    dataset.ValidateDimensions(dataset.GetPointDimension(),
-            queries.GetPointDimension());
-#endif
-
-    // Calculate the top K distances for all queries.
-    start_time = GetTimeInMicro();
-    float rating = 0.0;
-    CalculateRating(user_item,
-            cf_matrix,
-            &rating);
-    end_time = GetTimeInMicro();
-    reply->mutable_timing_data_in_micro()->set_calculate_cf_srv_time_in_micro((end_time - start_time));
-    // Difei: Added dispersion between each response
-    start_time = GetTimeInMicro();
-    end_time = GetTimeInMicro();
-    int rand_num = rand() % 1000000;
-    while (end_time - start_time < rand_num)
-    {
-    	end_time = GetTimeInMicro();
-    }
-    // Convert K-NN into form suitable for GRPC.
-    start_time = GetTimeInMicro();
-    PackCFServiceResponse(rating, 
-            reply);
-    end_time = GetTimeInMicro();
-    reply->mutable_timing_data_in_micro()->set_pack_cf_srv_resp_time_in_micro((end_time - start_time));
-    //GetCpuTimes(&idle_time_final, &total_time_final);
-    const float idle_time_delta = idle_time_final - idle_time_initial;
-    const float total_time_delta = total_time_final - total_time_initial;
-    const float cpu_util = (100.0 * (1.0 - (idle_time_delta/total_time_delta)));
-    reply->mutable_timing_data_in_micro()->set_cpu_util(cpu_util);
-}
-
 // Logic and data behind the server's behavior.
 class ServiceImpl final : public CFService::Service 
 {
@@ -199,7 +120,7 @@ class ServiceImpl final : public CFService::Service
         const float total_time_delta = total_time_final - total_time_initial;
         const float cpu_util = (100.0 * (1.0 - (idle_time_delta/total_time_delta)));
         reply->mutable_timing_data_in_micro()->set_cpu_util(cpu_util);
-                return Status::OK;
+        return Status::OK;
     }
 };
 
