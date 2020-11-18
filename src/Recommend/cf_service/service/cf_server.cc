@@ -12,6 +12,7 @@
 #include "cf_service/service/helper_files/server_helper.h"
 #include "cf_service/service/helper_files/timing.h"
 #include "cf_service/service/helper_files/utils.h"
+#include "../../protoc_files/cf.grpc.pb.h"
 
 using grpc::Server;
 using grpc::ServerAsyncResponseWriter;
@@ -160,10 +161,10 @@ class ServiceImpl final {
 //             {
 //                 HandleRpcs();
 //             }
-            server_->wait();
+            server_->Wait();
         }
 
-        Status CF(ServerContext* context, const CFRequest* request,
+        Status CF(ServerContext* context, CFRequest* request,
                 CFResponse* reply) override 
         {
             // std::cout << leaf_server_number << " b " << GetTimeInMicro() << std::endl;
@@ -208,7 +209,7 @@ class ServiceImpl final {
 #endif
             // reply->set_send_stamp(GetTimeInMicro() - begin);
             // Difei
-            ProcessRequest(request, reply);
+            ProcessRequest(*request, reply);
             return Status::OK;
             }
 
