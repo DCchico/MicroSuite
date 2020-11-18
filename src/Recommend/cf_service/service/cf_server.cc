@@ -121,19 +121,91 @@ void ProcessRequest(CFRequest &request,
 }
 
 // Logic and data behind the server's behavior.
-class ServiceImpl final : public CFService::Service {
-        // There is no shutdown handling in this code
-        Status CF(ServerContext* context, CFRequest* request,
-                CFResponse* reply) override 
+class ServiceImpl final : public CFService::Service 
+{
+    // There is no shutdown handling in this code
+    Status CF(ServerContext* context, const CFRequest* request,
+            CFResponse* reply) override 
+    {
+        // Difei
+        if(request->util_request().util_request())
         {
-            // Difei
-            ProcessRequest(*request, reply);
-            return Status::OK;
+            uint64_t user_time = 0, system_time = 0, io_time = 0, idle_time = 0;
+            GetCpuTimes(&user_time,
+                    &system_time,
+                    &io_time,
+                    &idle_time);
+            reply->mutable_util_response()->set_user_time(user_time);
+            reply->mutable_util_response()->set_system_time(system_time);
+            reply->mutable_util_response()->set_io_time(io_time);
+            reply->mutable_util_response()->set_idle_time(idle_time);
+            reply->mutable_util_response()->set_util_present(true);
         }
+
+        /* Simply copy request id into the reply - this was just a 
+        piggyback message.*/
+        reply->set_request_id(request->request_id());
+
+        /* Get the current idle time and total time
+        so as to calculate the CPU util when the cf is done.*/
+        size_t idle_time_initial = 0, total_time_initial = 0, idle_time_final = 0, total_time_final = 0;
+        //GetCpuTimes(&idle_time_initial, &total_time_initial);
+
+        // Unpack received queries and point IDs
+        uint32_t cf_server_id, shard_size;
+        uint64_t start_time, end_time;
+        start_time = GetTimeInMicro();
+        Request user_item;
+        UnpackCFServiceRequest(request,
+                &user_item);
+
+        end_time = GetTimeInMicro();
+        reply->mutable_timing_data_in_micro()->set_unpack_cf_srv_req_time_in_micro((end_time - start_time));
+        /* Next piggy back message - sent the received query back to the 
+        index server. Helps to merge async responses.*/
+        // Remove duplicate point IDs.
+        //RemoveDuplicatePointIDs(point_ids_vec);
+
+        // Dataset dimension must be equal to queries dimension.
+    #if 0
+        dataset.ValidateDimensions(dataset.GetPointDimension(),
+                queries.GetPointDimension());
+    #endif
+
+        // Calculate the top K distances for all queries.
+        start_time = GetTimeInMicro();
+        float rating = 0.0;
+        CalculateRating(user_item,
+                cf_matrix,
+                &rating);
+        end_time = GetTimeInMicro();
+        reply->mutable_timing_data_in_micro()->set_calculate_cf_srv_time_in_micro((end_time - start_time));
+        // Difei: Added dispersion between each response
+        start_time = GetTimeInMicro();
+        end_time = GetTimeInMicro();
+        int rand_num = rand() % 1000000;
+        while (end_time - start_time < rand_num)
+        {
+            end_time = GetTimeInMicro();
+        }
+        // Convert K-NN into form suitable for GRPC.
+        start_time = GetTimeInMicro();
+        PackCFServiceResponse(rating, 
+                reply);
+        end_time = GetTimeInMicro();
+        reply->mutable_timing_data_in_micro()->set_pack_cf_srv_resp_time_in_micro((end_time - start_time));
+        //GetCpuTimes(&idle_time_final, &total_time_final);
+        const float idle_time_delta = idle_time_final - idle_time_initial;
+        const float total_time_delta = total_time_final - total_time_initial;
+        const float cpu_util = (100.0 * (1.0 - (idle_time_delta/total_time_delta)));
+        reply->mutable_timing_data_in_micro()->set_cpu_util(cpu_util);
+                return Status::OK;
+    }
 };
 
 void RunServer() {
     std::string server_address(ip_port);
+    ServiceImpl service;
     ServerBuilder builder;
     // Listen on the given address without any authentication mechanism.
     try
@@ -145,26 +217,13 @@ void RunServer() {
     }
     // Register "service_" as the instance through which we'll communicate with
     // clients. In this case it corresponds to an *asynchronous* service.
-    builder.RegisterService(&service_);
-    // Get hold of the completion queue used for the asynchronous communication
-    // with the gRPC runtime.
-    // cq_ = builder.AddCompletionQueue();
+    builder.RegisterService(&service);
     // Finally assemble the server.
-    server_ = builder.BuildAndStart();
+    std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
     // Proceed to the server's main loop.
     // Difei
-//             if (cf_parallelism == 1) {
-//                 HandleRpcs();
-//             }
-//             omp_set_dynamic(0);
-//             omp_set_num_threads(cf_parallelism);
-//             omp_set_nested(2);
-// #pragma omp parallel
-//             {
-//                 HandleRpcs();
-//             }
-    server_->Wait();
+    server->Wait();
 }
 
 int main(int argc, char** argv) {

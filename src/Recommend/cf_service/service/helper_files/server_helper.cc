@@ -16,11 +16,11 @@ void CreateDatasetFromFile(std::string dataset_file_name,
     data::Load(dataset_file_name, *dataset);
 }
 
-void UnpackCFServiceRequest(const collaborative_filtering::CFRequest &request,
+void UnpackCFServiceRequest(collaborative_filtering::CFRequest *request,
         Request* user_item)
 {
-    user_item->user = request.user();
-    user_item->item = request.item();
+    user_item->user = request->user();
+    user_item->item = request->item();
 }
 
 void CalculateRating(const Request &user_item,
