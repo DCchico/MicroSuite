@@ -22,7 +22,7 @@ struct Request {
 void CreateDatasetFromFile(const std::string dataset_file_name, 
         Matrix* dataset);
 
-void UnpackCFServiceRequest(const collaborative_filtering::CFRequest &request,
+void UnpackCFServiceRequest(const collaborative_filtering::CFRequest *request,
         Request* user_item);
 
 void CalculateRating(const Request &user_item,
