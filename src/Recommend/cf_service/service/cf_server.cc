@@ -163,7 +163,7 @@ class ServiceImpl final {
             server_->wait();
         }
 
-        Status Leaf(ServerContext* context, const CFRequest* request,
+        Status CF(ServerContext* context, const CFRequest* request,
                 CFResponse* reply) override 
         {
             // std::cout << leaf_server_number << " b " << GetTimeInMicro() << std::endl;

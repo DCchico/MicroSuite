@@ -321,14 +321,14 @@ class CFServiceClient {
             
             // Create leaf request
             // TODO: Check these two functions
-            request_to_leaf.set_leaf_server_id(leaf_server_id);
+            request_to_leaf.set_cf_server_id(leaf_server_id);
             request_to_leaf.set_request_id(request_id);
             // Container for the data we expect from the server.
             CFResponse reply;
             // Context for the client. 
             ClientContext context;
             // TODO: In the leaf server
-            Status status = stub_->Leaf(&context, request_to_leaf, &reply);
+            Status status = stub_->CF(&context, request_to_leaf, &reply);
 
             // void* got_tag;
             // bool ok = false;
@@ -431,7 +431,7 @@ class CFServiceClient {
                 CHECK(false, "cf_srv does not exist\n");
             }
             // Once we're complete, deallocate the call object.
-            delete call;
+            // delete call;
         }
 
             private:
@@ -570,7 +570,7 @@ class CFServiceClient {
             map_fine_mutex[unique_request_id_value]->unlock();
 
             // Difei
-            resp_recvd_from_leaf_srv[mid_tier_tid].pop();      
+            resp_recvd_from_leaf_srv[tid].pop();      
         }
 
         /* The request processing thread runs this 
@@ -728,7 +728,7 @@ class CFServiceClient {
             requests_to_leaf_srv_queue.resize(dispatch_parallelism * number_of_cf_servers);
             resp_recvd_from_leaf_srv.resize(dispatch_parallelism);
             int idx;
-
+            std::vector<std::thread> response_threads;
             for(unsigned int i = 0; i < dispatch_parallelism; i++)
             {
                 for(unsigned int j = 0; j < number_of_cf_servers; j++)
@@ -740,7 +740,6 @@ class CFServiceClient {
                                     ip, grpc::InsecureChannelCredentials())));
                 }
             }
-            std::vector<std::thread> response_threads;
             std::thread perf(Perf);
             std::thread syscount(SysCount);
             std::thread hardirqs(Hardirqs);
