@@ -16,7 +16,7 @@ void CreateDatasetFromFile(std::string dataset_file_name,
     data::Load(dataset_file_name, *dataset);
 }
 
-void UnpackCFServiceRequest(collaborative_filtering::CFRequest *request,
+void UnpackCFServiceRequest(collaborative_filtering::CFRequest* request,
         Request* user_item)
 {
     user_item->user = request->user();
