@@ -284,37 +284,10 @@ class CFServiceClient {
             : stub_(CFService::NewStub(channel)) {}
         /* Assambles the client's payload, sends it and presents the response back
            from the server.*/
-        void GetRating(const uint32_t cf_server_id,
-                const bool util_present,
-                uint64_t request_id,
-                CFRequest request_to_cf_srv)
-        {
-            // Create RCP request by adding queries, point IDs, and number of NN.
-            CreateCFServiceRequest(cf_server_id,
-                    util_present,
-                    &request_to_cf_srv);
-            request_to_cf_srv.set_request_id(request_id);
-            //cf_srv_timing_info->create_cf_srv_request_time = end_time - start_time;
-            // Container for the data we expect from the server.
-            CFResponse reply;
-            // Context for the client. 
-            ClientContext context;
-            // Call object to store rpc data
-            AsyncClientCall* call = new AsyncClientCall;
-            // stub_->AsyncSayHello() performs the RPC call, returning an instance to
-            // store in "call". Because we are using the asynchronous API, we need to
-            // hold on to the "call" instance in order to get updates on the ongoing RPC.
-            call->response_reader = stub_->AsyncCF(&call->context, request_to_cf_srv, cf_srv_cq);
-            // Request that, upon completion of the RPC, "reply" be updated with the
-            // server's response; "status" with the indication of whether the operation
-            // was successful. Tag the request with the memory address of the call object.
-            call->response_reader->Finish(&call->reply, &call->status, (void*)call);
-        }
-
         // Loop while listening for completed responses.
         // Prints out the response from the server.
         // Difei
-        void AsyncCompleteRpc(const uint32_t leaf_server_id, 
+        void CompleteRpc(const uint32_t leaf_server_id, 
                 const uint64_t request_id,
                 const int mid_tier_tid,
                 CFRequest request_to_leaf) {
@@ -329,19 +302,6 @@ class CFServiceClient {
             ClientContext context;
             // TODO: In the leaf server
             Status status = stub_->CF(&context, request_to_leaf, &reply);
-
-            // void* got_tag;
-            // bool ok = false;
-            // cf_srv_cq->Next(&got_tag, &ok);
-            //auto r = cq_.AsyncNext(&got_tag, &ok, gpr_time_0(GPR_CLOCK_REALTIME));
-            //if (r == ServerCompletionQueue::TIMEOUT) return;
-            //if (r == ServerCompletionQueue::GOT_EVENT) {
-            // The tag in this example is the memory location of the call object
-            // AsyncClientCall* call = static_cast<AsyncClientCall*>(got_tag);
-
-            // Verify that the request was completed successfully. Note that "ok"
-            // corresponds solely to the request for updates introduced by Finish().
-            //GPR_ASSERT(ok);
 
             if (status.ok())
             {
@@ -419,11 +379,6 @@ class CFServiceClient {
                     uint64_t prev_rec = response_count_down_map[unique_request_id].recommender_reply->recommender_time();
                     response_count_down_map[unique_request_id].recommender_reply->set_recommender_time(prev_rec + (GetTimeInMicro() - s1));
                     map_fine_mutex[unique_request_id]->unlock();
-
-                    map_coarse_mutex.lock();
-                    server->Finish(unique_request_id, 
-                            response_count_down_map[unique_request_id].recommender_reply);
-                    map_coarse_mutex.unlock();
                     // Difei
                     resp_recvd_from_leaf_srv[mid_tier_tid].push(true);
                 }
@@ -435,26 +390,10 @@ class CFServiceClient {
         }
 
             private:
-        // struct for keeping state and data information
-        struct AsyncClientCall {
-            // Container for the data we expect from the server.
-            CFResponse reply;
-            // Context for the client. It could be used to convey extra information to
-            // the server and/or tweak certain RPC behaviors.
-            ClientContext context;
-            // Storage for the status of the RPC upon completion.
-            Status status;
-            std::unique_ptr<ClientAsyncResponseReader<CFResponse>> response_reader;
-        };
-
         // Out of the passed in Channel comes the stub, stored here, our view of the
         // server's exposed services.
         std::unique_ptr<CFService::Stub> stub_;
-
-        // The producer-consumer queue we use to communicate asynchronously with the
-        // gRPC runtime.
-        CompletionQueue cq_;
-        };
+};
 
         void ProcessRequest(RecommenderRequest &recommender_request, 
                 uint64_t unique_request_id_value,
@@ -527,6 +466,7 @@ class CFServiceClient {
                     &user,
                     &item,
                     &request_to_cf_srv);
+            request_to_cf_srv.set_request_id(unique_request_id_value);
 #ifndef NODEBUG
             std::cout << "aft unpack\n";
 #endif
@@ -544,20 +484,13 @@ class CFServiceClient {
             //map_fine_mutex[unique_request_id_value]->unlock();
 
             // Difei
-            struct ThreadArgs* thread_args = new struct ThreadArgs[number_of_cf_servers];
             struct ReqToCFSrv* req_to_leaf_srv = new struct ReqToCFSrv[number_of_cf_servers];
 
             for(unsigned int i = 0; i < number_of_cf_servers; i++) {
                 int index = (tid*number_of_cf_servers) + i;
-                // cf_srv_connections[index]->GetRating(i,
-                //         util_present,
-                //         unique_request_id_value,
-                //         request_to_cf_srv);
                 CreateCFServiceRequest(i,
                     util_present,
                     &request_to_cf_srv);
-                request_to_cf_srv.set_request_id(unique_request_id_value);
-
                 req_to_leaf_srv[i].cf_server_id = i;
                 req_to_leaf_srv[i].request_id = unique_request_id_value;
                 req_to_leaf_srv[i].recommender_tid = tid;
@@ -583,7 +516,7 @@ class CFServiceClient {
             while(true)
             {
                 ReqToCFSrv req_to_leaf_srv = requests_to_leaf_srv_queue[id].pop();
-                cf_srv_connections[id]->AsyncCompleteRpc(req_to_leaf_srv.cf_server_id,
+                cf_srv_connections[id]->CompleteRpc(req_to_leaf_srv.cf_server_id,
                         req_to_leaf_srv.request_id,
                         req_to_leaf_srv.recommender_tid,
                         req_to_leaf_srv.request_to_cf_srv);
@@ -748,12 +681,6 @@ class CFServiceClient {
             std::thread runqlat(Runqlat);
             //std::thread hitm(Hitm);
             std::thread tcpretrans(Tcpretrans);
-
-            // Difei
-            // for(unsigned int i = 0; i < number_of_response_threads; i++)
-            // {
-            //     response_threads.emplace_back(std::thread(ProcessResponses));
-            // }
 
             std::thread kill_ack = std::thread(FinalKill);
 
