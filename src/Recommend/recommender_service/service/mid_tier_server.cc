@@ -666,7 +666,7 @@ class CFServiceClient {
             {
                 for(unsigned int j = 0; j < number_of_cf_servers; j++)
                 {
-                    idx = i * dispatch_parallelism + j;
+                    idx = i * number_of_cf_servers + j;
                     response_threads.emplace_back(std::thread(ProcessResponses, idx));
                     std::string ip = cf_server_ips[j];
                     cf_srv_connections.emplace_back(new CFServiceClient(grpc::CreateChannel(
