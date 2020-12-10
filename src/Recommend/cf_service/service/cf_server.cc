@@ -99,13 +99,13 @@ void ProcessRequest(CFRequest &request,
     end_time = GetTimeInMicro();
     reply->mutable_timing_data_in_micro()->set_calculate_cf_srv_time_in_micro((end_time - start_time));
     // Difei: Added dispersion between each response
-    start_time = GetTimeInMicro();
-    end_time = GetTimeInMicro();
-    int rand_num = rand() % 1000000;
-    while (end_time - start_time < rand_num)
-    {
-    	end_time = GetTimeInMicro();
-    }
+    // start_time = GetTimeInMicro();
+    // end_time = GetTimeInMicro();
+    // int rand_num = rand() % 1000000;
+    // while (end_time - start_time < rand_num)
+    // {
+    // 	end_time = GetTimeInMicro();
+    // }
     // Convert K-NN into form suitable for GRPC.
     start_time = GetTimeInMicro();
     PackCFServiceResponse(rating, 
