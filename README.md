@@ -12,186 +12,129 @@
 If you use this software in your work, we request that you cite the µSuite paper ("μSuite: A Benchmark Suite for Microservices", Akshitha Sriraman and Thomas F. Wenisch, IEEE International Symposium on Workload Characterization, September 2018), and that you send us a citation of your work.
 
 # Installation
-To install µSuite, please follow these steps (works on Debian):
+To install µSuite, please follow these steps (works on Ubuntu):
+Step 0. Preparation
+apt-get update && apt-get install -y libssl-dev
+apt-get update && apt-get install -y wget
+wget -q -O cmake-linux.sh https://github.com/Kitware/CMake/releases/download/v3.16.1/cmake-3.16.1-Linux-x86_64.sh
+sh cmake-linux.sh -- --skip-license --prefix=/usr
+rm cmake-linux.sh
 
-(1) **Install GRPC:**
-
-```
-sudo apt-get install build-essential autoconf libtool curl cmake git pkg-config
-
-
-git clone -b $(curl -L http://grpc.io/release) https://github.com/grpc/grpc
-
+Step 1. Install gRPC
+apt-get install build-essential autoconf libtool pkg-config
+apt-get install libgflags-dev
+apt-get install clang-5.0 libc++-dev
+git clone -b v1.31.1 https://github.com/grpc/grpc
 cd grpc
-
 git submodule update --init
+mkdir -p cmake/build
+cd cmake/build
+cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DgRPC_INSTALL=ON \
+  -DgRPC_BUILD_TESTS=OFF \
+  -DgRPC_SSL_PROVIDER=package \
+  -DBUILD_SHARED_LIBS=ON \
+  ../..
+make -j4 install
 
-make
-
-sudo make install
-```
-
-Step out of the GRPC directory.
-
-If you have any issues installing GRPC, refer to: https://github.com/grpc/grpc/blob/master/INSTALL.md)
-
-(2) **Install Protobuf 3.0.0 or higher:**
-
-```
-wget https://github.com/google/protobuf/releases/download/v3.2.0/protobuf-cpp-3.2.0.tar.gz
-
-tar -xzvf protobuf-cpp-3.2.0.tar.gz
-
-cd protobuf-3.2.0
-
+Step 2. Install Protobuf 3.13.0
+wget https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-all-3.13.0.tar.gz
+tar -xvzf protobuf-all-3.13.0.tar.gz
+cd protobuf-3.13.0
 ./configure
+make -j4
+make check -j4
+make install
+ldconfig
 
-make
-
-make check
-
-sudo make install
-
-sudo ldconfig
-```
-
-Step out of the protobuf directiry.
-
-If you have any issues installing Protobuf, refer to: https://github.com/protocolbuffers/protobuf/releases
-
-
-(3) **Install OpenSSL and Intel's MKL:**
-
-```
+Step 3. Install OpenSSL and Intel's MKL
 sudo apt-get install openssl
-
 sudo apt-get install libssl-dev
-
-wget http://registrationcenter-download.intel.com/akdlm/irc_nas/tec/11306/l_mkl_2017.2.174.tgz
-
-tar xzvf l_mkl_2017.2.174.tgz
-
+wget http://registrationcenter-download.intel.com/akdlm/irc_nas/tec/13575/l_mkl_2019.0.117.tgz
+tar -xzvf l_mkl_2019.0.117.tgz
 cd l_mkl_*
+./install.sh
 
-./install.sh   -> Follow the prompts that appear to install MKL.
-```
-
-Step back into the MicroSuite directory.
-
-
-(4) **Install FLANN:**
-
-```
+Step 4. Install FLANN 
+--degrade cmake below to 3.10 with apt autoremove
 cd src/HDSearch/mid_tier_service
-
 mkdir build
-
 cd build
-
 cmake ..
-
 sudo make install
-
 make
-```
 
-If you have any issues installing FLANN, please refer to: http://www.cs.ubc.ca/research/flann/uploads/FLANN/flann_manual-1.8.4.pdf and https://github.com/mariusmuja/flann/issues
-
-(5) **Install MLPACK (MicroSuite uses MLPACK version 2.2.5):**
-
-``
+Step 5. Install MLPACK (2.2.5)
 sudo apt-get install libmlpack-dev
-``
 
-If you have any issues installing or running MLPACK, please refer to: https://github.com/mlpack/mlpack
 
-(6) **Build HDSearch:**
 
+Build Components Inside uSuite:
+
+Step 0. Preparation
+apt-get install libmemcached-dev libboost-all-dev
+
+Step 1. Build HDSearch
+Code Change: Add header file --> #include <grpc++/grpc++.h>
+	a) src/HDSearch/bucket_service/service/helper_files/client_helper.h
+	b) src/HDSearch/bucket_service/service/helper_files/server_helper.h
 
 cd src/HDSearch/protoc_files
-
-make  ---> It's fine if you have errors, just make sure that the "*.grpc.*" and "*pb.*" files get created.
-
+make ---> It's fine if you have errors, just make sure that the ".grpc." and "pb." files get created.
 cd ../bucket_service/service
-
 make
-
 cd ../../mid_tier_service/service/
-
 make
-
 cd ../../load_generator/
-
-make  --> Open loop load generators are used for measuring latency and closed-loop load generators help measure throughput.
-
-
+make --> Open loop load generators are used for measuring latency and closed-loop load generators help measure throughput.
 Step back to the MicroSuite parent directory.
 
-(7) **Build Router:**
-
+Step 2. Build Router:
+Code Change: Add header file --> #include <grpc++/grpc++.h>
+	a) src/Router/lookup_service/service/helper_files/client_helper.h
 
 cd src/Router/protoc_files
-
-make  ---> It's fine if you have errors, just make sure that the "*.grpc.*" and "*pb.*" files get created.
-
+make ---> It's fine if you have errors, just make sure that the ".grpc." and "pb." files get created.
 cd ../lookup_service/service
-
 make
-
 cd ../../mid_tier_service/service/
-
 make
-
 cd ../../load_generator/
-
 make
-
-
 Step back to the MicroSuite parent directory.
 
-(8) **Build Set Algebra:**
-
+Step 3. Build Set Algebra:
+Code Change: Add header file --> #include <grpc++/grpc++.h>
+	a) src/SetAlgebra/intersection_service/service/helper_files/client_helper.h
 
 cd src/SetAlgebra/protoc_files
-
-make  ---> It's fine if you have errors, just make sure that the "*.grpc.*" and "*pb.*" files get created.
-
+make ---> It's fine if you have errors, just make sure that the ".grpc." and "pb." files get created.
 cd ../intersection_service/service/
-
 make
-
 cd ../../union_service/service
-
 make
-
 cd ../../load_generator/
-
 make
-
-
 Step back to the MicroSuite parent directory.
 
-(8) **Build Recommend:**
-
+Step 4. Build Recommend:
+Code Change:
+	a) src/Recommend/cf_service/service/helper_files/client_helper.h
+		- Add header file --> #include <grpc++/grpc++.h>
+	b) src/Recommend/cf_service/service/cf_server.cc
+		- Comment "cf_matrix->Init();"
 
 cd src/Recommend/protoc_files
-
-make  ---> It's fine if you have errors, just make sure that the "*.grpc.*" and "*pb.*" files get created.
-
+make ---> It's fine if you have errors, just make sure that the ".grpc." and "pb." files get created.
 cd ../cf_service/service/
-
 make
-
 cd ../../recommender_service/service/
-
 make
-
 cd ../../load_generator/
-
 make
-
-
 Step back to the MicroSuite parent directory.
+
 
 # To Run MicroSuite
 Note: Simply typing <./binary_file_name> for any of µSuite's microservices will tell you the exact arguments that you need to enter for that microservice.
